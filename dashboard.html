@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>월급루팡의 사건일지 ver 3.0 — 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:       #EDECEA;
+  --bg2:      #F5F4F0;
+  --card:     #FFFFFF;
+  --border:   #E0DED9;
+  --text:     #1A1A1A;
+  --text2:    #666;
+  --text3:    #AAA;
+  --green:    #0F6E56;
+  --green-bg: rgba(15,110,86,.08);
+  --red:      #B33A3A;
+  --red-bg:   rgba(179,58,58,.08);
+  --blue:     #185FA5;
+  --blue-bg:  rgba(24,95,165,.08);
+  --amber:    #C07A00;
+  --header:   #2C2C2A;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'Noto Sans KR', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  padding: 1.25rem;
+  line-height: 1.5;
+}
+
+.wrap { max-width: 1040px; margin: 0 auto; }
+
+/* ── 헤더 ── */
+.sheet-title {
+  background: var(--header);
+  color: #fff;
+  padding: .65rem 1.1rem;
+  border-radius: 7px 7px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.sheet-title h1 { font-size: 13px; font-weight: 500; letter-spacing: .01em; }
+.sheet-title .meta { font-size: 10px; color: #888; white-space: nowrap; }
+
+/* 업데이트 정보 */
+.update-bar {
+  background: #1e1e1c;
+  color: #666;
+  padding: .4rem 1.1rem;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.update-bar strong { color: #aaa; }
+.update-bar .upload-btn {
+  margin-left: auto;
+  background: #2F5597;
+  color: #fff;
+  border: none;
+  padding: .3rem .8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--sans);
+  transition: background .15s;
+}
+.update-bar .upload-btn:hover { background: #3a67b8; }
+
+/* 드롭존 */
+.drop-zone {
+  display: none;
+  border: 1.5px dashed #aaa;
+  border-radius: 6px;
+  padding: 1.2rem;
+  text-align: center;
+  color: #888;
+  font-size: 11px;
+  background: #f0eeea;
+  cursor: pointer;
+  transition: all .2s;
+  margin-bottom: 10px;
+}
+.drop-zone.active { border-color: #2F5597; background: #eef2fa; color: #2F5597; }
+.drop-zone.show { display: block; }
+
+/* ── 바디 ── */
+.sheet-body {
+  background: var(--bg2);
+  border: .5px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 7px 7px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── 섹션 레이블 ── */
+.sec-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #bbb;
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sec-label::after { content: ''; flex: 1; height: .5px; background: var(--border); }
+
+/* ── 요약 카드 ── */
+.summary-cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.sc {
+  background: var(--card);
+  border: .5px solid var(--border);
+  border-radius: 6px;
+  padding: .75rem .9rem;
+}
+.sc-label { font-size: 9px; color: var(--text3); letter-spacing: .02em; margin-bottom: 4px; }
+.sc-val { font-size: 22px; font-weight: 500; font-family: var(--mono); }
+.sc-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.green { color: var(--green); }
+.red   { color: var(--red); }
+.blue  { color: var(--blue); }
+.amber { color: var(--amber); }
+
+/* ── 차트 박스 ── */
+.chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chart-grid-3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+.chart-box {
+  background: var(--card);
+  border: .5px solid var(--border);
+  border-radius: 6px;
+  padding: .75rem .9rem;
+}
+.chart-title { font-size: 11px; font-weight: 500; color: #444; margin-bottom: 3px; }
+.chart-sub   { font-size: 9px; color: var(--text3); margin-bottom: .6rem; }
+.chart-wrap  { position: relative; }
+
+/* ── 예산 게이지 ── */
+.budget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.budget-box {
+  background: var(--card);
+  border: .5px solid var(--border);
+  border-radius: 6px;
+  padding: .75rem .9rem;
+}
+.bg-item { margin-bottom: .65rem; }
+.bg-item:last-child { margin-bottom: 0; }
+.bg-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+.bg-name   { font-size: 11px; font-weight: 500; }
+.bg-nums   { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+.bg-remain { font-size: 10px; font-weight: 500; }
+.bar-wrap  { height: 5px; background: #eee; border-radius: 3px; overflow: hidden; margin-bottom: 3px; }
+.bar-fill  { height: 5px; border-radius: 3px; transition: width .4s ease; }
+.bar-green { background: #1D9E75; }
+.bar-amber { background: #D97706; }
+.bar-red   { background: #B33A3A; }
+.bg-pct    { font-size: 9px; color: var(--text3); font-family: var(--mono); }
+
+/* ── 통장 현황 ── */
+.asset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: .5px solid #f0efeb;
+  font-size: 11px;
+}
+.asset-row:last-child { border-bottom: none; padding-top: 7px; font-weight: 600; font-size: 12px; }
+.asset-bank { color: var(--text2); }
+.asset-amt  { font-family: var(--mono); font-weight: 500; }
+.asset-chg  { font-size: 10px; margin-left: 6px; font-family: var(--mono); }
+
+/* ── 비교 테이블 ── */
+.compare-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.compare-table th {
+  font-size: 9px; font-weight: 600; color: var(--text3);
+  padding: 3px 6px; border-bottom: .5px solid #eee; text-align: right;
+  letter-spacing: .04em;
+}
+.compare-table th:first-child { text-align: left; }
+.compare-table td {
+  padding: 4px 6px; border-bottom: .5px solid #f5f4f0;
+  text-align: right; color: var(--text2);
+  font-family: var(--mono);
+}
+.compare-table td:first-child { text-align: left; color: var(--text2); font-family: var(--sans); }
+.compare-table tr:last-child td { border-bottom: none; font-weight: 600; color: var(--text); }
+.up { color: var(--green); }
+.dn { color: var(--red); }
+
+/* ── 데이터 없음 안내 ── */
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--text3);
+  font-size: 11px;
+  flex-direction: column;
+  gap: 6px;
+}
+.no-data .icon { font-size: 24px; }
+
+/* ── 반응형 ── */
+@media (max-width: 700px) {
+  .summary-cards { grid-template-columns: 1fr 1fr; }
+  .chart-grid-2, .chart-grid-3, .budget-grid { grid-template-columns: 1fr; }
+  .sheet-title { flex-direction: column; align-items: flex-start; gap: .3rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="sheet-title">
+  <h1>월급루팡의 사건일지 ver 3.0 — 대시보드 (2026년)</h1>
+  <span class="meta">년간현황 CSV 업로드 → 자동 갱신</span>
+</div>
+
+<div class="update-bar">
+  <span>마지막 업데이트: <strong id="last-updated">데이터 없음</strong></span>
+  <span>기준 월: <strong id="data-month">—</strong></span>
+  <button class="upload-btn" onclick="toggleDrop()">📂 CSV 업로드</button>
+</div>
+
+<div class="drop-zone" id="dropZone"
+  ondragover="ev.preventDefault();this.classList.add('active')"
+  ondragleave="this.classList.remove('active')"
+  ondrop="handleDrop(event)">
+  <div>년간현황 시트를 CSV로 저장 후 여기에 드래그앤드롭 하거나 클릭하세요</div>
+  <div style="margin-top:6px;font-size:10px;color:#bbb">xlsx → 다른 이름으로 저장 → CSV (쉼표로 분리)</div>
+  <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleFile(this.files[0])">
+</div>
+
+<div class="sheet-body">
+
+<!-- ① 연간 요약 -->
+<div>
+  <div class="sec-label">① 연간 요약</div>
+  <div class="summary-cards">
+    <div class="sc">
+      <div class="sc-label" id="lbl-income">올해 총 수입</div>
+      <div class="sc-val green" id="val-income">—</div>
+      <div class="sc-sub" id="sub-income">CSV 업로드 후 자동 계산</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label" id="lbl-expense">올해 순소비</div>
+      <div class="sc-val red" id="val-expense">—</div>
+      <div class="sc-sub" id="sub-expense">저축·이체 제외</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label" id="lbl-saving">저축·이체</div>
+      <div class="sc-val blue" id="val-saving">—</div>
+      <div class="sc-sub" id="sub-saving">월평균 —</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">현재 순자산</div>
+      <div class="sc-val green" id="val-asset">—</div>
+      <div class="sc-sub" id="sub-asset">전월 대비 —</div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 수입 vs 순소비 -->
+<div>
+  <div class="sec-label">② 월별 수입 vs 순소비</div>
+  <div class="chart-box">
+    <div class="chart-title">월별 수입 · 순소비 비교</div>
+    <div class="chart-sub">파란색 = 수입 · 빨간색 = 순소비 (저축·이체 제외)</div>
+    <div class="chart-wrap" style="height:180px">
+      <canvas id="barChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ③ 순자산 추이 + 항목별 비중 -->
+<div>
+  <div class="sec-label">③ 순자산 추이 · 항목별 연간 비중</div>
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="chart-title">순자산 월별 추이</div>
+      <div class="chart-sub">전체 통장 잔액 합계 (이월현황 기준)</div>
+      <div class="chart-wrap" style="height:180px">
+        <canvas id="assetChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">항목별 연간 지출 비중</div>
+      <div class="chart-sub">순소비 기준 (부채상환·저축 제외)</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="chart-wrap" style="height:160px;width:160px;flex-shrink:0">
+          <canvas id="donutChart"></canvas>
+        </div>
+        <div style="font-size:10px;color:var(--text2);display:flex;flex-direction:column;gap:5px" id="donut-legend"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ 예산 달성률 -->
+<div>
+  <div class="sec-label">④ 예산 달성률 (여가성 항목)</div>
+  <div class="budget-grid">
+    <div class="budget-box">
+      <div class="chart-title" style="margin-bottom:.75rem">월별 예산 현황</div>
+      <div id="budget-monthly">
+        <div class="no-data"><span class="icon">📊</span><span>CSV 업로드 후 표시됩니다</span></div>
+      </div>
+    </div>
+    <div class="budget-box">
+      <div class="chart-title" style="margin-bottom:.75rem">연간 예산 누계</div>
+      <div id="budget-annual">
+        <div class="no-data"><span class="icon">📊</span><span>CSV 업로드 후 표시됩니다</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ 전년 비교 -->
+<div>
+  <div class="sec-label">⑤ 전년 비교 (2025 vs 2026 순소비)</div>
+  <div class="chart-box">
+    <div class="chart-title">월별 순소비 비교</div>
+    <div class="chart-sub">연한 색 = 2025 · 진한 색 = 2026</div>
+    <div class="chart-wrap" style="height:160px">
+      <canvas id="compareChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ 통장 현황 -->
+<div>
+  <div class="sec-label">⑥ 순자산 현황</div>
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="chart-title">통장별 잔액</div>
+      <div id="asset-rows">
+        <div class="no-data"><span class="icon">🏦</span><span>CSV 업로드 후 표시됩니다</span></div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">전년 비교 요약</div>
+      <div id="compare-table-wrap">
+        <div class="no-data"><span class="icon">📋</span><span>CSV 업로드 후 표시됩니다</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- sheet-body -->
+</div><!-- wrap -->
+
+<script>
+// ── 전역 상수 ────────────────────────────────────────────────
+const MONTH_LABELS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const GRID = 'rgba(0,0,0,0.06)';
+const TC   = '#999';
+
+// 항목 행 인덱스 (년간현황 CSV 기준 — 행3=식비, 행17=총수입 등)
+// CSV는 0-index: 행3 → idx 2
+const ROW = {
+  식비:       2,
+  여가생활비: 3,
+  취미수집:   4,
+  여행비:     5,
+  디지털구독: 6,
+  주거공과금: 7,
+  패션뷰티:   8,
+  의료건강:   9,
+  보험:       10,
+  교통차량:   11,
+  경조사:     12,
+  기부나눔:   13,
+  부채상환:   14,
+  // 요약
+  총수입:     16,  // 행17
+  총지출:     17,
+  저축이체:   18,
+  순소비:     19,
+  순자산:     20,  // 이월현황 합계
+};
+
+// col 0 = 레이블, col 1~12 = 1~12월, col 13 = 합계
+const COL_START = 1; // 1월 = index 1
+
+// 예산 항목 (수동 설정 — CSV에 예산시트 없음)
+let BUDGET = {
+  '식비':       { monthly: 300000, annual: 3600000 },
+  '여가생활비': { monthly: 300000, annual: 1200000 },
+  '취미·수집':  { monthly: 150000, annual: 600000  },
+  '여행비':     { monthly: 500000, annual: 3000000 },
+  '디지털·구독':{ monthly: 100000, annual: 1200000 },
+};
+
+// ── 차트 인스턴스 ────────────────────────────────────────────
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); charts[id] = null; }
+}
+
+// ── 드롭존 토글 ─────────────────────────────────────────────
+function toggleDrop() {
+  const dz = document.getElementById('dropZone');
+  dz.classList.toggle('show');
+}
+
+document.getElementById('dropZone').addEventListener('click', () => {
+  document.getElementById('csvInput').click();
+});
+
+function handleDrop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('active');
+  const file = ev.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+
+// ── CSV 파싱 ─────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = parseCSV(e.target.result);
+      processData(rows);
+      document.getElementById('dropZone').classList.remove('show');
+      document.getElementById('last-updated').textContent =
+        new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric'});
+    } catch(err) {
+      alert('CSV 파싱 오류: ' + err.message + '\n\n년간현황 시트를 CSV로 저장했는지 확인해주세요.');
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseCSV(text) {
+  // BOM 제거
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  return text.split('\n').map(line => {
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+}
+
+function toNum(s) {
+  if (!s) return 0;
+  return parseFloat(String(s).replace(/[,\s"₩]/g,'')) || 0;
+}
+
+function fmt(n, unit='만') {
+  if (!n) return '—';
+  const m = Math.round(n / 10000);
+  return m.toLocaleString('ko-KR') + unit;
+}
+
+function fmtRaw(n) {
+  if (!n) return '—';
+  return Math.round(n).toLocaleString('ko-KR');
+}
+
+// ── 데이터 처리 ──────────────────────────────────────────────
+function processData(rows) {
+  // 유효한 월 파악 (순소비 행에서 값 있는 열)
+  const netRow = rows[ROW.순소비] || [];
+  let lastMonth = 0;
+  for (let m = 1; m <= 12; m++) {
+    if (toNum(netRow[m]) !== 0) lastMonth = m;
+  }
+  if (lastMonth === 0) lastMonth = 12;
+
+  document.getElementById('data-month').textContent = `${lastMonth}월 기준`;
+
+  // 월별 데이터 추출
+  const get = (rowIdx, m) => toNum((rows[rowIdx] || [])[m]);
+  const getAll = rowIdx => Array.from({length:12}, (_,i) => get(rowIdx, i+1));
+
+  const incomes  = getAll(ROW.총수입);
+  const nets     = getAll(ROW.순소비);
+  const savings  = getAll(ROW.저축이체);
+  const assets   = getAll(ROW.순자산);
+  const cats = {
+    식비:       getAll(ROW.식비),
+    여가생활비: getAll(ROW.여가생활비),
+    취미수집:   getAll(ROW.취미수집),
+    여행비:     getAll(ROW.여행비),
+    디지털구독: getAll(ROW.디지털구독),
+    주거공과금: getAll(ROW.주거공과금),
+    패션뷰티:   getAll(ROW.패션뷰티),
+    의료건강:   getAll(ROW.의료건강),
+    보험:       getAll(ROW.보험),
+    교통차량:   getAll(ROW.교통차량),
+    경조사:     getAll(ROW.경조사),
+    기부나눔:   getAll(ROW.기부나눔),
+    부채상환:   getAll(ROW.부채상환),
+  };
+
+  // 누계
+  const sum = arr => arr.slice(0, lastMonth).reduce((a,b)=>a+b, 0);
+  const totalIncome  = sum(incomes);
+  const totalNet     = sum(nets);
+  const totalSaving  = sum(savings);
+  const curAsset     = assets[lastMonth-1] || 0;
+  const prevAsset    = lastMonth > 1 ? (assets[lastMonth-2] || 0) : 0;
+  const assetDiff    = curAsset - prevAsset;
+
+  // ① 요약 카드
+  document.getElementById('lbl-income').textContent = `올해 총 수입 (1~${lastMonth}월)`;
+  document.getElementById('val-income').textContent = fmt(totalIncome);
+  document.getElementById('sub-income').textContent = `월평균 ${fmt(totalIncome/lastMonth)}`;
+
+  document.getElementById('lbl-expense').textContent = `올해 순소비 (1~${lastMonth}월)`;
+  document.getElementById('val-expense').textContent = fmt(totalNet);
+  document.getElementById('sub-expense').textContent = `저축·이체 제외`;
+
+  document.getElementById('lbl-saving').textContent = `저축·이체 (1~${lastMonth}월)`;
+  document.getElementById('val-saving').textContent = fmt(totalSaving);
+  document.getElementById('sub-saving').textContent = `월평균 ${fmt(totalSaving/lastMonth)}`;
+
+  document.getElementById('val-asset').textContent = fmt(curAsset);
+  document.getElementById('sub-asset').textContent =
+    `전월 대비 ${assetDiff >= 0 ? '+' : ''}${fmt(assetDiff)}`;
+
+  // ② 막대 차트
+  const nullFill = arr => arr.map((v,i) => i < lastMonth ? v/10000 : null);
+  destroyChart('bar');
+  charts.bar = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: MONTH_LABELS,
+      datasets: [
+        { label:'수입', data: nullFill(incomes), backgroundColor:'#378ADD', borderRadius:3 },
+        { label:'순소비', data: nullFill(nets),  backgroundColor:'#E24B4A', borderRadius:3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { font:{size:10}, color:TC } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw?.toFixed(0)}만원` } }
+      },
+      scales: {
+        x: { ticks:{color:TC,font:{size:10}}, grid:{color:GRID} },
+        y: { ticks:{color:TC,font:{size:10},callback:v=>v+'만'}, grid:{color:GRID} }
+      }
+    }
+  });
+
+  // ③ 순자산 꺾은선
+  const assetFilled = assets.slice(0, lastMonth).map(v => v/10000);
+  const assetLabels = MONTH_LABELS.slice(0, lastMonth).map(l => l+'초');
+  destroyChart('asset');
+  charts.asset = new Chart(document.getElementById('assetChart'), {
+    type: 'line',
+    data: {
+      labels: assetLabels,
+      datasets: [{
+        label: '순자산',
+        data: assetFilled,
+        borderColor: '#1D9E75',
+        backgroundColor: 'rgba(29,158,117,0.08)',
+        pointBackgroundColor: '#1D9E75',
+        pointRadius: 5, tension: 0.3, fill: true
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `순자산: ${c.raw?.toFixed(0)}만원` } }
+      },
+      scales: {
+        x: { ticks:{color:TC,font:{size:10}}, grid:{color:GRID} },
+        y: { ticks:{color:TC,font:{size:10},callback:v=>v+'만'}, grid:{color:GRID} }
+      }
+    }
+  });
+
+  // ③ 도넛
+  const donutColors = ['#D85A30','#378ADD','#7F77DD','#888','#BA7517','#555','#D4537E','#2E7D32','#C07A00','#185FA5','#9C27B0','#78909C','#E24B4A'];
+  const donutItems = [
+    {label:'주거·공과금', val: sum(cats.주거공과금)},
+    {label:'여행비',      val: sum(cats.여행비)},
+    {label:'여가생활비',  val: sum(cats.여가생활비)},
+    {label:'보험',        val: sum(cats.보험)},
+    {label:'취미·수집',  val: sum(cats.취미수집)},
+    {label:'교통·차량',  val: sum(cats.교통차량)},
+    {label:'경조사',      val: sum(cats.경조사)},
+    {label:'식비',        val: sum(cats.식비)},
+    {label:'디지털·구독',val: sum(cats.디지털구독)},
+    {label:'패션·뷰티',  val: sum(cats.패션뷰티)},
+    {label:'의료·건강',  val: sum(cats.의료건강)},
+    {label:'기부·나눔',  val: sum(cats.기부나눔)},
+  ].filter(d=>d.val>0).sort((a,b)=>b.val-a.val);
+
+  const donutTotal = donutItems.reduce((a,b)=>a+b.val,0);
+  destroyChart('donut');
+  charts.donut = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: donutItems.map(d=>d.label),
+      datasets: [{
+        data: donutItems.map(d=>d.val),
+        backgroundColor: donutItems.map((_,i)=>donutColors[i%donutColors.length]),
+        borderWidth: 1, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.label}: ${fmt(c.raw)}` } }
+      }
+    }
+  });
+
+  const leg = document.getElementById('donut-legend');
+  leg.innerHTML = '';
+  donutItems.forEach((d,i) => {
+    const pct = donutTotal > 0 ? Math.round(d.val/donutTotal*100) : 0;
+    leg.innerHTML += `<span style="display:flex;align-items:center;gap:4px">
+      <span style="width:8px;height:8px;border-radius:2px;background:${donutColors[i%donutColors.length]};flex-shrink:0"></span>
+      ${d.label} <span style="color:#aaa;font-family:monospace">${pct}%</span></span>`;
+  });
+
+  // ④ 예산 게이지
+  const budgetCats = [
+    {key:'식비',       row:cats.식비,       label:'식비'},
+    {key:'여가생활비', row:cats.여가생활비, label:'여가생활비'},
+    {key:'취미·수집',  row:cats.취미수집,   label:'취미·수집'},
+    {key:'여행비',     row:cats.여행비,      label:'여행비'},
+    {key:'디지털·구독',row:cats.디지털구독, label:'디지털·구독'},
+  ];
+
+  function renderBudget(containerId, useMonthly) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    budgetCats.forEach(({key, row, label}) => {
+      const b = BUDGET[key] || BUDGET[label];
+      if (!b) return;
+      const budgetVal = useMonthly ? b.monthly : b.annual;
+      const actual    = useMonthly ? (row[lastMonth-1]||0) : sum(row);
+      const pct       = budgetVal > 0 ? Math.min(actual/budgetVal, 1) : 0;
+      const pctShow   = budgetVal > 0 ? Math.round(actual/budgetVal*100) : 0;
+      const remain    = budgetVal - actual;
+      const over      = remain < 0;
+      const barCls    = pctShow >= 100 ? 'bar-red' : pctShow >= 80 ? 'bar-amber' : 'bar-green';
+      const remCls    = over ? 'red' : pctShow >= 80 ? 'amber' : 'green';
+      const remIcon   = over ? '🔴' : pctShow >= 80 ? '🟡' : '🟢';
+
+      el.innerHTML += `
+        <div class="bg-item">
+          <div class="bg-header">
+            <span class="bg-name">${label}</span>
+            <span class="bg-nums">${fmtRaw(actual)} / ${fmtRaw(budgetVal)}</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill ${barCls}" style="width:${Math.round(pct*100)}%"></div></div>
+          <div style="display:flex;justify-content:space-between">
+            <span class="bg-pct">${pctShow}%${over?' 초과':''}</span>
+            <span class="bg-remain ${remCls}">${over?'-':'+'}${fmtRaw(Math.abs(remain))} ${over?'초과 ':'남음 '}${remIcon}</span>
+          </div>
+        </div>`;
+    });
+  }
+
+  renderBudget('budget-monthly', true);
+  renderBudget('budget-annual', false);
+
+  // ⑤ 전년 비교 차트 (현재 데이터 기준)
+  destroyChart('compare');
+  charts.compare = new Chart(document.getElementById('compareChart'), {
+    type: 'bar',
+    data: {
+      labels: MONTH_LABELS.slice(0, lastMonth),
+      datasets: [
+        { label:'2025 순소비', data: nets.slice(0,lastMonth).map(v=>v/10000).map(()=>null), backgroundColor:'#B5D4F4', borderRadius:3 },
+        { label:'2026 순소비', data: nets.slice(0,lastMonth).map(v=>v/10000), backgroundColor:'#378ADD', borderRadius:3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels:{font:{size:10},color:TC} },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.raw?.toFixed(0)}만원` } }
+      },
+      scales: {
+        x: { ticks:{color:TC,font:{size:10}}, grid:{color:GRID} },
+        y: { ticks:{color:TC,font:{size:10},callback:v=>v+'만'}, grid:{color:GRID} }
+      }
+    }
+  });
+
+  // ⑥ 통장 현황 — 순자산 행에서 월별 잔액 표시
+  const assetRowEl = document.getElementById('asset-rows');
+  assetRowEl.innerHTML = `
+    <div style="color:var(--text3);font-size:10px;margin-bottom:8px">
+      이월현황 합계 기준 · 통장별 상세는 월별 시트 참조
+    </div>
+    <div class="asset-row">
+      <span class="asset-bank">전체 순자산 (${lastMonth}월)</span>
+      <span><span class="asset-amt">${fmtRaw(curAsset)}</span>
+      <span class="asset-chg ${assetDiff>=0?'green':'red'}">${assetDiff>=0?'+':''}${fmtRaw(assetDiff)}</span></span>
+    </div>
+    <div class="asset-row">
+      <span class="asset-bank">전월 순자산 (${lastMonth-1||12}월)</span>
+      <span class="asset-amt">${fmtRaw(prevAsset)}</span>
+    </div>
+    <div class="asset-row">
+      <span>누적 증가 (1월 → ${lastMonth}월)</span>
+      <span class="asset-amt ${curAsset-assets[0]>=0?'green':'red'}">${curAsset-assets[0]>=0?'+':''}${fmtRaw(curAsset-assets[0])}</span>
+    </div>
+  `;
+
+  // 비교 테이블 — 당해연도 데이터만 (전년도 데이터는 별도 CSV 필요)
+  const cmpEl = document.getElementById('compare-table-wrap');
+  const surplus = totalIncome - totalNet - totalSaving;
+  cmpEl.innerHTML = `
+    <table class="compare-table">
+      <tr><th>항목</th><th>2026 (1~${lastMonth}월)</th><th>월평균</th></tr>
+      <tr><td>총 수입</td><td>${fmtRaw(totalIncome)}</td><td>${fmtRaw(totalIncome/lastMonth)}</td></tr>
+      <tr><td>총 순소비</td><td class="dn">${fmtRaw(totalNet)}</td><td>${fmtRaw(totalNet/lastMonth)}</td></tr>
+      <tr><td>저축·이체</td><td class="up">${fmtRaw(totalSaving)}</td><td>${fmtRaw(totalSaving/lastMonth)}</td></tr>
+      <tr><td>부채상환</td><td>${fmtRaw(sum(cats.부채상환))}</td><td>${fmtRaw(sum(cats.부채상환)/lastMonth)}</td></tr>
+      <tr><td>잉여 (수입-소비-저축)</td><td class="${surplus>=0?'up':'dn'}">${surplus>=0?'+':''}${fmtRaw(surplus)}</td><td>—</td></tr>
+    </table>
+    <div style="font-size:9px;color:var(--text3);margin-top:8px">전년 비교는 2025년 CSV를 별도 업로드하면 추가 가능합니다</div>
+  `;
+}
+
+// ── 드래그앤드롭 이벤트 ─────────────────────────────────────
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.csv')) {
+    handleFile(file);
+  }
+});
+</script>
+</body>
+</html>
