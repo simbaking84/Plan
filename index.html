@@ -142,7 +142,7 @@ select.fsel{font-size:11px;padding:4px 8px;border-radius:5px;border:.5px solid v
   </div>
   <div class="header-right">
     <span class="chip" id="chipDate">데이터 없음</span>
-    <button class="upload-btn" style="background:#0F6E56" onclick="loadFromSheets()">🔄 Sheets 불러오기</button>
+    <button class="upload-btn" id="sheetsBtn" style="background:#0F6E56" onclick="loadFromSheets()">🔄 Sheets</button>
     <button class="upload-btn" onclick="toggleDrop()">📂 xlsx 업로드</button>
   </div>
 </div>
@@ -339,12 +339,64 @@ select.fsel{font-size:11px;padding:4px 8px;border-radius:5px;border:.5px solid v
 </div><!-- main -->
 
 <script>
+const ML=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const GC='rgba(0,0,0,.05)',TC='#B0ADA6';
+const CAT_COLORS=['#D85A30','#378ADD','#7F77DD','#2E7D32','#BA7517','#8B4513','#C06090','#555','#B33A3A','#185FA5','#9C27B0','#78909C'];
+
+// 레이블 → 행 매핑 (실제 시트 A열 텍스트 기준)
+const LABEL_MAP = {
+  '식비':         '식비',
+  '여가생활비':   '여가생활비',
+  '취미·수집':    '취미수집',
+  '여행비':       '여행비',
+  '디지털·구독':  '디지털구독',
+  '주거·공과금':  '주거공과금',
+  '패션·뷰티':    '패션뷰티',
+  '의료·건강':    '의료건강',
+  '보험':         '보험',
+  '교통·차량':    '교통차량',
+  '경조사':       '경조사',
+  '기부·나눔':    '기부나눔',
+  '부채상환':     '부채상환',
+  '총수입':       '총 수입',
+  '총지출':       '총 지출',
+  '저축·이체':    '저축이체',
+  '순소비':       '순소비',
+  '순자산':       '잔액',
+  '현금':         '현금',
+  'KB국민(월급)': 'KB국민(월급)',
+  'KB국민(저축)': 'KB국민(저축)',
+  '신한(공과금)': '신한(공과금)',
+  '신한(청약)':   '신한(청약)',
+  '카카오(여행)': '카카오(여행)',
+  'IBK기업(용돈)':'IBK기업(용돈)',
+  'K뱅크(코인)':  'K뱅크(코인)',
+  'KB카드(신용)': 'KB카드(신용)',
+  '신한카드(신용)':'신한카드(신용)',
+  '식비(개인)':   '개인식비',
+  '여행비(개인)': '개인여행비',
+};
+
+const BUDGET_Q={
+  '식비':        {q:[300000,300000,300000,300000],annual:3600000},
+  '여가생활비':  {q:[100000,100000,100000,100000],annual:1200000},
+  '취미·수집':   {q:[100000,100000,100000,100000],annual:1200000},
+  '여행비':      {q:[200000,200000,200000,200000],annual:2400000},
+  '디지털·구독': {q:[150000,150000,150000,150000],annual:1800000},
+};
+const PAY_CARD=['KB카드(신용)','신한카드(신용)'];
+const PAY_CASH=['현금'];
+const PAY_TRANS=['KB국민(월급)','KB국민(저축)','신한(공과금)','신한(청약)','카카오(여행)','IBK기업(용돈)','K뱅크(코인)'];
+const PAY_CHART_KEYS=['KB카드(신용)','신한카드(신용)','현금'];
+const PAY_CHART_COLS=['#378ADD','#E24B4A','#0A6B45'];
+const PAY_CHART_LBLS=['KB카드','신한카드','현금'];
+
 // ── Google Sheets 연동 ───────────────────────────────────────
 const SHEET_ID = '1HkSgjTxbaJInlGT9x4ony8nRy4hR710BCQyzXvcFQGA';
 const SHEET_NAME = encodeURIComponent('년간현황');
 
 async function loadFromSheets() {
-  const btn = document.querySelector('button[onclick="loadFromSheets()"]');
+  const btn = document.getElementById('sheetsBtn');
   btn.textContent = '⏳ 불러오는 중...';
   btn.disabled = true;
   try {
@@ -352,21 +404,19 @@ async function loadFromSheets() {
     const res = await fetch(url);
     if (!res.ok) throw new Error('네트워크 오류: ' + res.status);
     const text = await res.text();
-    const rows = parseCSV(text);
-    processCSVData(rows);
-    const now = new Date();
+    parseAndLoad(text);
     const el = document.getElementById('chipDate');
-    el.textContent = now.toLocaleDateString('ko-KR',{month:'long',day:'numeric'}) + ' Sheets 동기화';
+    el.textContent = new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric'}) + ' Sheets 동기화';
     el.className = 'chip live';
   } catch(err) {
-    alert('Sheets 불러오기 실패: ' + err.message + '\n\n공유 설정을 확인해주세요.');
+    alert('Sheets 불러오기 실패: ' + err.message);
   } finally {
-    btn.textContent = '🔄 Sheets 불러오기';
+    btn.textContent = '🔄 Sheets';
     btn.disabled = false;
   }
 }
 
-function parseCSV(text) {
+function parseCSVtoRows(text) {
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
   return text.split('\n').map(line => {
     const cols = []; let cur = '', inQ = false;
@@ -381,14 +431,25 @@ function parseCSV(text) {
   });
 }
 
-function processCSVData(rows) {
-  // CSV는 col 0 = 레이블, col 1~12 = 1~12월
-  // DATA 형식으로 변환 (xlsx 방식과 동일하게)
-  DATA = rows;
-  const na = getRow(ROW.순소비);
+// 레이블 기반으로 ROW_DATA 딕셔너리 구성
+let ROW_DATA = {};  // { '식비': [1월값, 2월값, ...], ... }
+
+function parseAndLoad(csvText) {
+  const rows = parseCSVtoRows(csvText);
+  ROW_DATA = {};
+  rows.forEach(row => {
+    const label = (row[0] || '').replace(/\s+/g,' ').trim();
+    if (!label) return;
+    // 1~12월 값 추출 (col 1~12)
+    const vals = Array.from({length:12}, (_,i) => toNum(row[i+1]));
+    ROW_DATA[label] = vals;
+  });
+  // DATA_MAX 계산 (순소비 기준)
+  const netVals = getRowByLabel('순소비');
   DATA_MAX = 0;
-  for (let m = 1; m <= 12; m++) if (na[m-1] !== 0) DATA_MAX = m;
+  for (let m = 1; m <= 12; m++) if (netVals[m-1] !== 0) DATA_MAX = m;
   if (!DATA_MAX) DATA_MAX = 12;
+  DATA = true; // 데이터 로드 완료 플래그
   document.getElementById('startM').value = 1;
   document.getElementById('endM').value = DATA_MAX;
   SEL_M = Array.from({length: DATA_MAX}, (_, i) => i + 1);
@@ -397,45 +458,19 @@ function processCSVData(rows) {
   setQ(1, DATA_MAX, 'ytd');
 }
 
-// 페이지 로드 시 자동으로 Sheets 데이터 불러오기
-window.addEventListener('load', () => {
-  loadFromSheets();
-});
-
-const ML=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-const GC='rgba(0,0,0,.05)',TC='#B0ADA6';
-const CAT_COLORS=['#D85A30','#378ADD','#7F77DD','#2E7D32','#BA7517','#8B4513','#C06090','#555','#B33A3A','#185FA5','#9C27B0','#78909C'];
-const ROW={
-  식비:3,여가생활비:4,'취미·수집':5,여행비:6,'디지털·구독':7,
-  '주거·공과금':8,'패션·뷰티':9,'의료·건강':10,보험:11,
-  '교통·차량':12,경조사:13,'기부·나눔':14,부채상환:15,
-  총수입:17,총지출:18,'저축·이체':19,순소비:20,순자산:21,
-  현금:25,'KB국민(월급)':26,'KB국민(저축)':27,'신한(공과금)':28,
-  '신한(청약)':29,'카카오(여행)':30,'IBK기업(용돈)':31,'K뱅크(코인)':32,
-  'KB카드(신용)':33,'신한카드(신용)':34,
-  '식비(개인)':36,'여행비(개인)':37,
-};
-const BUDGET_Q={
-  '식비':        {q:[300000,300000,300000,300000],annual:3600000},
-  '여가생활비':  {q:[100000,100000,100000,100000],annual:1200000},
-  '취미·수집':   {q:[100000,100000,100000,100000],annual:1200000},
-  '여행비':      {q:[200000,200000,200000,200000],annual:2400000},
-  '디지털·구독': {q:[150000,150000,150000,150000],annual:1800000},
-};
-const PAY_CARD=['KB카드(신용)','신한카드(신용)'];
-const PAY_CASH=['현금'];
-const PAY_TRANS=['KB국민(월급)','KB국민(저축)','신한(공과금)','신한(청약)','카카오(여행)','IBK기업(용돈)','K뱅크(코인)'];
-// 계정이체 제외 지불방식 (차트용)
-const PAY_CHART_KEYS=['KB카드(신용)','신한카드(신용)','현금'];
-const PAY_CHART_COLS=['#378ADD','#E24B4A','#0A6B45'];
-const PAY_CHART_LBLS=['KB카드','신한카드','현금'];
+// 레이블로 월별 배열 반환
+function getRowByLabel(key) {
+  const sheetLabel = LABEL_MAP[key] || key;
+  return ROW_DATA[sheetLabel] || Array(12).fill(0);
+}
 
 let DATA=null,DATA_MAX=0,SEL_M=[],SEL_P=['all'],charts={};
 
-function toNum(v){if(v==null||v==='')return 0;return parseFloat(String(v).replace(/[,\s₩]/g,''))||0;}
+function toNum(v){if(v==null||v==='')return 0;return parseFloat(String(v).replace(/[,\s₩"]/g,''))||0;}
 function fmt(n){if(!n&&n!==0)return'—';const m=Math.round(Math.abs(n)/10000);return(n<0?'-':'')+m.toLocaleString('ko-KR')+'만';}
 function fmtR(n){if(!n&&n!==0)return'—';return Math.round(n).toLocaleString('ko-KR');}
-function getRow(rn){if(!DATA)return Array(14).fill(0);const r=DATA[rn-1]||[];return Array.from({length:14},(_,i)=>toNum(r[i+1]));}
+// getRow: 키(한글 레이블)로 12개월 배열 반환
+function getRow(key){return getRowByLabel(key);}
 function sumM(arr,ms){return ms.reduce((a,m)=>a+(arr[m-1]||0),0);}
 function dc(id){if(charts[id]){charts[id].destroy();charts[id]=null;}}
 
@@ -468,25 +503,20 @@ function handleFile(file){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
       const wsName=wb.SheetNames.find(n=>n.includes('년간현황')||n.includes('연간'))||wb.SheetNames[0];
-      DATA=XLSX.utils.sheet_to_json(wb.Sheets[wsName],{header:1,defval:''});
-      const na=getRow(ROW.순소비);
-      DATA_MAX=0;for(let m=1;m<=12;m++)if(na[m-1]!==0)DATA_MAX=m;
-      if(!DATA_MAX)DATA_MAX=12;
-      document.getElementById('startM').value=1;
-      document.getElementById('endM').value=DATA_MAX;
-      SEL_M=Array.from({length:DATA_MAX},(_,i)=>i+1);
-      SEL_P=['all'];
-      syncPayPills();
-      setQ(1,DATA_MAX,'ytd');
+      const ws=wb.Sheets[wsName];
+      const csvText=XLSX.utils.sheet_to_csv(ws);
+      parseAndLoad(csvText);
       toggleDrop();
-      const now=new Date();
       const el=document.getElementById('chipDate');
-      el.textContent=now.toLocaleDateString('ko-KR',{month:'long',day:'numeric'})+' xlsx 업로드';
+      el.textContent=new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric'})+' xlsx 업로드';
       el.className='chip live';
     }catch(err){alert('파일 읽기 오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
 }
+
+// 페이지 로드 시 자동으로 Sheets 데이터 불러오기
+window.addEventListener('load', () => { loadFromSheets(); });
 
 // ★ 기간 선택
 function applyRange(){
@@ -533,16 +563,16 @@ function getPayKeys(){
 }
 function getNetFiltered(ms){
   const keys=getPayKeys();
-  if(!keys)return sumM(getRow(ROW.순소비),ms);
-  return keys.reduce((t,k)=>{const rn=ROW[k];return rn?t+sumM(getRow(rn),ms):t;},0);
+  if(!keys)return sumM(getRow('순소비'),ms);
+  return keys.reduce((t,k)=>t+sumM(getRow(k),ms),0);
 }
-function getCatFiltered(rn,ms){
+function getCatFiltered(key,ms){
   const keys=getPayKeys();
-  if(!keys)return sumM(getRow(rn),ms);
-  const total=sumM(getRow(ROW.순소비),ms);
+  if(!keys)return sumM(getRow(key),ms);
+  const total=sumM(getRow('순소비'),ms);
   const pt=getNetFiltered(ms);
   const ratio=total>0?pt/total:0;
-  return sumM(getRow(rn),ms)*ratio;
+  return sumM(getRow(key),ms)*ratio;
 }
 
 // 예산 헬퍼
@@ -552,7 +582,7 @@ function getBA(k,ms){return ms.reduce((s,m)=>s+getBM(k,m),0);}
 // ★ 한 줄 요약
 function buildSummary(ms,lastM,totalInc,totalNet,totalSav){
   const savRate=totalInc>0?totalSav/totalInc*100:0;
-  const bCats=[{k:'식비',r:ROW['식비(개인)']},{k:'여가생활비',r:ROW.여가생활비},{k:'취미·수집',r:ROW['취미·수집']},{k:'여행비',r:ROW['여행비(개인)']},{k:'디지털·구독',r:ROW['디지털·구독']}];
+  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
   const overCats=bCats.filter(({k,r})=>{const actual=getCatFiltered(r,[lastM]);const budget=getBM(k,lastM);return budget>0&&actual>budget;}).map(c=>c.k);
   const banner=document.getElementById('summaryBanner');
   banner.className='summary-banner show';
@@ -570,12 +600,11 @@ function buildActionBar(lastM){
   const daysInMonth=new Date(today.getFullYear(),lastM,0).getDate();
   const daysPassed=lastM===today.getMonth()+1?today.getDate():daysInMonth;
   const daysLeft=daysInMonth-daysPassed;
-  const thisMonthNet=sumM(getRow(ROW.순소비),[lastM]);
-  const thisMonthInc=sumM(getRow(ROW.총수입),[lastM]);
+  const thisMonthNet=sumM(getRow('순소비'),[lastM]);
+  const thisMonthInc=sumM(getRow('총수입'),[lastM]);
   const dailyAvg=daysPassed>0?thisMonthNet/daysPassed:0;
   const forecast=thisMonthNet+(dailyAvg*daysLeft);
-  // 예산 합계
-  const bCats=[{k:'식비',r:ROW['식비(개인)']},{k:'여가생활비',r:ROW.여가생활비},{k:'취미·수집',r:ROW['취미·수집']},{k:'여행비',r:ROW['여행비(개인)']},{k:'디지털·구독',r:ROW['디지털·구독']}];
+  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
   const budgetTotal=bCats.reduce((s,{k})=>s+getBM(k,lastM),0);
   const remain=thisMonthInc-thisMonthNet;
   const budgetRemain=budgetTotal-thisMonthNet;
@@ -609,12 +638,12 @@ function render(){
   if(!DATA)return;
   const ms=SEL_M,cnt=ms.length,lastM=ms[ms.length-1];
   const rangeStr=cnt===1?ms[0]+'월':cnt===DATA_MAX?'1~'+DATA_MAX+'월':ms[0]+'~'+ms[ms.length-1]+'월';
-  const totalInc=sumM(getRow(ROW.총수입),ms);
-  const totalSav=sumM(getRow(ROW['저축·이체']),ms);
+  const totalInc=sumM(getRow('총수입'),ms);
+  const totalSav=sumM(getRow('저축·이체'),ms);
   const totalNet=getNetFiltered(ms);
-  const aArr=getRow(ROW.순자산);
-  const incArr=getRow(ROW.총수입);
-  const netArr=getRow(ROW.순소비);
+  const aArr=getRow('순자산');
+  const incArr=getRow('총수입');
+  const netArr=getRow('순소비');
   const curA=aArr[lastM-1]||0,prevA=lastM>1?(aArr[lastM-2]||0):0;
 
   buildSummary(ms,lastM,totalInc,totalNet,totalSav);
@@ -650,7 +679,7 @@ function render(){
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC}},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},position:'left'},y1:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{display:false},position:'right'}}}});
 
   // 도넛
-  const catDefs=[{l:'주거·공과금',r:ROW['주거·공과금']},{l:'여행비',r:ROW.여행비},{l:'여가생활비',r:ROW.여가생활비},{l:'보험',r:ROW.보험},{l:'취미·수집',r:ROW['취미·수집']},{l:'교통·차량',r:ROW['교통·차량']},{l:'경조사',r:ROW.경조사},{l:'식비',r:ROW.식비},{l:'디지털·구독',r:ROW['디지털·구독']},{l:'패션·뷰티',r:ROW['패션·뷰티']},{l:'의료·건강',r:ROW['의료·건강']},{l:'기부·나눔',r:ROW['기부·나눔']}];
+  const catDefs=[{l:'주거·공과금',r:'주거·공과금'},{l:'여행비',r:'여행비'},{l:'여가생활비',r:'여가생활비'},{l:'보험',r:'보험'},{l:'취미·수집',r:'취미·수집'},{l:'교통·차량',r:'교통·차량'},{l:'경조사',r:'경조사'},{l:'식비',r:'식비'},{l:'디지털·구독',r:'디지털·구독'},{l:'패션·뷰티',r:'패션·뷰티'},{l:'의료·건강',r:'의료·건강'},{l:'기부·나눔',r:'기부·나눔'}];
   const dd=catDefs.map(d=>({l:d.l,v:Math.max(0,getCatFiltered(d.r,ms))})).filter(d=>d.v>0).sort((a,b)=>b.v-a.v);
   const dt=dd.reduce((a,b)=>a+b.v,0);
   dc('donut');
@@ -658,7 +687,7 @@ function render(){
   document.getElementById('donutLegend').innerHTML=dd.map((d,i)=>`<div class="legend-item"><div class="legend-dot" style="background:${CAT_COLORS[i%CAT_COLORS.length]}"></div><span>${d.l}</span><span class="legend-pct">${dt>0?Math.round(d.v/dt*100):0}%</span></div>`).join('');
 
   // ★ 예산 탭
-  const bCats=[{k:'식비',r:ROW['식비(개인)']},{k:'여가생활비',r:ROW.여가생활비},{k:'취미·수집',r:ROW['취미·수집']},{k:'여행비',r:ROW['여행비(개인)']},{k:'디지털·구독',r:ROW['디지털·구독']}];
+  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
   function renderB(id,monthly){
     const el=document.getElementById(id);el.innerHTML='';
     bCats.forEach(({k,r})=>{
@@ -675,18 +704,17 @@ function render(){
   document.getElementById('budgetASub').textContent=`${rangeStr} 누적`;
   renderB('budgetMonthly',true);renderB('budgetAnnual',false);
 
-  // 예산 트렌드 차트
   dc('budgetTrend');
   const bColors=['#D85A30','#378ADD','#7F77DD','#2E7D32','#BA7517'];
   charts.budgetTrend=new Chart(document.getElementById('budgetTrendChart'),{type:'line',data:{labels:ML.slice(0,DATA_MAX),datasets:bCats.map(({k,r},i)=>({label:k,data:getRow(r).slice(0,DATA_MAX).map((v,idx)=>ms.includes(idx+1)?v/10000:null),borderColor:bColors[i],backgroundColor:'transparent',pointRadius:3,tension:.3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC}},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC}}}}});
 
   // ★ 지불방식 탭 — 계정이체 제외
   dc('pay');
-  charts.pay=new Chart(document.getElementById('payChart'),{type:'bar',data:{labels:ML.slice(0,DATA_MAX),datasets:PAY_CHART_KEYS.map((k,i)=>({label:PAY_CHART_LBLS[i],data:getRow(ROW[k]).slice(0,DATA_MAX).map((v,idx)=>ms.includes(idx+1)?v/10000:null),backgroundColor:PAY_CHART_COLS[i],borderRadius:2,stack:'p'}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC},stacked:true},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},stacked:true}}}});
+  charts.pay=new Chart(document.getElementById('payChart'),{type:'bar',data:{labels:ML.slice(0,DATA_MAX),datasets:PAY_CHART_KEYS.map((k,i)=>({label:PAY_CHART_LBLS[i],data:getRow(k).slice(0,DATA_MAX).map((v,idx)=>ms.includes(idx+1)?v/10000:null),backgroundColor:PAY_CHART_COLS[i],borderRadius:2,stack:'p'}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC},stacked:true},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},stacked:true}}}});
 
-  // ★ 통장별 잔액 + 비율
+  // ★ 통장별 잔액
   const banks=[{l:'현금',k:'현금'},{l:'KB국민(월급)',k:'KB국민(월급)'},{l:'KB국민(저축)',k:'KB국민(저축)'},{l:'신한(공과금)',k:'신한(공과금)'},{l:'신한(청약)',k:'신한(청약)'},{l:'카카오(여행)',k:'카카오(여행)'},{l:'IBK기업(용돈)',k:'IBK기업(용돈)'},{l:'K뱅크(코인)',k:'K뱅크(코인)'}];
-  const bankData=banks.map(b=>({...b,val:getRow(ROW[b.k])[lastM-1]||0}));
+  const bankData=banks.map(b=>({...b,val:getRow(b.k)[lastM-1]||0}));
   const bankTotal=bankData.reduce((s,b)=>s+b.val,0);
   let bankHtml='';
   bankData.sort((a,b)=>b.val-a.val).forEach(b=>{
@@ -697,14 +725,13 @@ function render(){
   document.getElementById('bankRows').innerHTML=bankHtml;
   document.getElementById('bankSub').textContent=`${lastM}월 기준`;
 
-  // ★ 자산 탭 — 카드 사용량
+  // ★ 카드 사용량
   const cards=[{l:'KB카드',k:'KB카드(신용)',c:'#378ADD'},{l:'신한카드',k:'신한카드(신용)',c:'#E24B4A'}];
   dc('cardTrend');
-  charts.cardTrend=new Chart(document.getElementById('cardTrendChart'),{type:'bar',data:{labels:ML.slice(0,DATA_MAX),datasets:cards.map(c=>({label:c.l,data:getRow(ROW[c.k]).slice(0,DATA_MAX).map((v,i)=>ms.includes(i+1)?v/10000:null),backgroundColor:c.c,borderRadius:3,stack:'c'}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC},stacked:true},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},stacked:true}}}});
+  charts.cardTrend=new Chart(document.getElementById('cardTrendChart'),{type:'bar',data:{labels:ML.slice(0,DATA_MAX),datasets:cards.map(c=>({label:c.l,data:getRow(c.k).slice(0,DATA_MAX).map((v,i)=>ms.includes(i+1)?v/10000:null),backgroundColor:c.c,borderRadius:3,stack:'c'}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC},stacked:true},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},stacked:true}}}});
 
-  // 카드 월별 전체 표
-  const kbArr=getRow(ROW['KB카드(신용)']).slice(0,DATA_MAX);
-  const shArr=getRow(ROW['신한카드(신용)']).slice(0,DATA_MAX);
+  const kbArr=getRow('KB카드(신용)').slice(0,DATA_MAX);
+  const shArr=getRow('신한카드(신용)').slice(0,DATA_MAX);
   let cardHtml=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
     <tr style="border-bottom:.5px solid var(--border)">
       <th style="text-align:left;padding:4px 6px;font-size:9px;color:var(--text3);font-weight:600">월</th>
