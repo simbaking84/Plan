@@ -458,10 +458,15 @@ function parseAndLoad(csvText) {
   setQ(1, DATA_MAX, 'ytd');
 }
 
-// 레이블로 월별 배열 반환
+// 레이블로 월별 배열 반환 (LABEL_MAP → ROW_DATA 순서로 탐색)
 function getRowByLabel(key) {
-  const sheetLabel = LABEL_MAP[key] || key;
-  return ROW_DATA[sheetLabel] || Array(12).fill(0);
+  // 1. LABEL_MAP에 매핑 있으면 사용
+  const mapped = LABEL_MAP[key];
+  if (mapped && ROW_DATA[mapped]) return ROW_DATA[mapped];
+  // 2. 직접 키로 ROW_DATA 탐색
+  if (ROW_DATA[key]) return ROW_DATA[key];
+  // 3. 못 찾으면 0 배열
+  return Array(12).fill(0);
 }
 
 let DATA=null,DATA_MAX=0,SEL_M=[],SEL_P=['all'],charts={};
@@ -582,7 +587,7 @@ function getBA(k,ms){return ms.reduce((s,m)=>s+getBM(k,m),0);}
 // ★ 한 줄 요약
 function buildSummary(ms,lastM,totalInc,totalNet,totalSav){
   const savRate=totalInc>0?totalSav/totalInc*100:0;
-  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
+  const bCats=[{k:'식비',r:'개인식비'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미수집'},{k:'여행비',r:'개인여행비'},{k:'디지털·구독',r:'디지털구독'}];
   const overCats=bCats.filter(({k,r})=>{const actual=getCatFiltered(r,[lastM]);const budget=getBM(k,lastM);return budget>0&&actual>budget;}).map(c=>c.k);
   const banner=document.getElementById('summaryBanner');
   banner.className='summary-banner show';
@@ -604,7 +609,7 @@ function buildActionBar(lastM){
   const thisMonthInc=sumM(getRow('총수입'),[lastM]);
   const dailyAvg=daysPassed>0?thisMonthNet/daysPassed:0;
   const forecast=thisMonthNet+(dailyAvg*daysLeft);
-  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
+  const bCats=[{k:'식비',r:'개인식비'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미수집'},{k:'여행비',r:'개인여행비'},{k:'디지털·구독',r:'디지털구독'}];
   const budgetTotal=bCats.reduce((s,{k})=>s+getBM(k,lastM),0);
   const remain=thisMonthInc-thisMonthNet;
   const budgetRemain=budgetTotal-thisMonthNet;
@@ -679,7 +684,7 @@ function render(){
   ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:10},color:TC}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw?.toFixed(0)}만원`}}},scales:{x:{ticks:{color:TC,font:{size:10}},grid:{color:GC}},y:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{color:GC},position:'left'},y1:{ticks:{color:TC,font:{size:10},callback:v=>v+'만'},grid:{display:false},position:'right'}}}});
 
   // 도넛
-  const catDefs=[{l:'주거·공과금',r:'주거·공과금'},{l:'여행비',r:'여행비'},{l:'여가생활비',r:'여가생활비'},{l:'보험',r:'보험'},{l:'취미·수집',r:'취미·수집'},{l:'교통·차량',r:'교통·차량'},{l:'경조사',r:'경조사'},{l:'식비',r:'식비'},{l:'디지털·구독',r:'디지털·구독'},{l:'패션·뷰티',r:'패션·뷰티'},{l:'의료·건강',r:'의료·건강'},{l:'기부·나눔',r:'기부·나눔'}];
+  const catDefs=[{l:'주거·공과금',r:'주거공과금'},{l:'여행비',r:'여행비'},{l:'여가생활비',r:'여가생활비'},{l:'보험',r:'보험'},{l:'취미·수집',r:'취미수집'},{l:'교통·차량',r:'교통차량'},{l:'경조사',r:'경조사'},{l:'식비',r:'식비'},{l:'디지털·구독',r:'디지털구독'},{l:'패션·뷰티',r:'패션뷰티'},{l:'의료·건강',r:'의료건강'},{l:'기부·나눔',r:'기부나눔'}];
   const dd=catDefs.map(d=>({l:d.l,v:Math.max(0,getCatFiltered(d.r,ms))})).filter(d=>d.v>0).sort((a,b)=>b.v-a.v);
   const dt=dd.reduce((a,b)=>a+b.v,0);
   dc('donut');
@@ -687,7 +692,7 @@ function render(){
   document.getElementById('donutLegend').innerHTML=dd.map((d,i)=>`<div class="legend-item"><div class="legend-dot" style="background:${CAT_COLORS[i%CAT_COLORS.length]}"></div><span>${d.l}</span><span class="legend-pct">${dt>0?Math.round(d.v/dt*100):0}%</span></div>`).join('');
 
   // ★ 예산 탭
-  const bCats=[{k:'식비',r:'식비(개인)'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미·수집'},{k:'여행비',r:'여행비(개인)'},{k:'디지털·구독',r:'디지털·구독'}];
+  const bCats=[{k:'식비',r:'개인식비'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미수집'},{k:'여행비',r:'개인여행비'},{k:'디지털·구독',r:'디지털구독'}];
   function renderB(id,monthly){
     const el=document.getElementById(id);el.innerHTML='';
     bCats.forEach(({k,r})=>{
