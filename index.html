@@ -228,7 +228,7 @@ select.fsel{font-size:11px;padding:4px 8px;border-radius:5px;border:.5px solid v
     <div class="action-card">
       <span class="ac-icon">📈</span>
       <div class="ac-body">
-        <div class="ac-lbl">월말 예상 지출</div>
+        <div class="ac-lbl">월평균 지출</div>
         <div class="ac-val" id="acForecast">—</div>
         <div class="ac-sub" id="acForecastSub">—</div>
         <span class="ac-tag" id="acForecastTag"></span>
@@ -598,45 +598,61 @@ function buildSummary(ms,lastM,totalInc,totalNet,totalSav){
   else{banner.classList.add('sb-amber');icon.textContent='🟡';text.textContent=`저축률 ${savRate.toFixed(1)}% — 저축 비율 개선 여지 있음`;status.textContent='보통';}
 }
 
-// ★ 행동 지표 (잔여: 수입기준 + 예산기준 함께)
-function buildActionBar(lastM){
+// ★ 행동 지표 — 선택 기간 전체 누계 기준
+function buildActionBar(ms, rangeStr){
   document.getElementById('actionSection').style.display='block';
-  const today=new Date();
-  const daysInMonth=new Date(today.getFullYear(),lastM,0).getDate();
-  const daysPassed=lastM===today.getMonth()+1?today.getDate():daysInMonth;
-  const daysLeft=daysInMonth-daysPassed;
-  const thisMonthNet=sumM(getRow('순소비'),[lastM]);
-  const thisMonthInc=sumM(getRow('총수입'),[lastM]);
-  const dailyAvg=daysPassed>0?thisMonthNet/daysPassed:0;
-  const forecast=thisMonthNet+(dailyAvg*daysLeft);
+  const totalNet = sumM(getRow('순소비'), ms);
+  const totalInc = sumM(getRow('총수입'), ms);
+  const totalSav = sumM(getRow('저축·이체'), ms);
+  const cnt = ms.length;
   const bCats=[{k:'식비',r:'개인식비'},{k:'여가생활비',r:'여가생활비'},{k:'취미·수집',r:'취미수집'},{k:'여행비',r:'개인여행비'},{k:'디지털·구독',r:'디지털구독'}];
-  const budgetTotal=bCats.reduce((s,{k})=>s+getBM(k,lastM),0);
-  const remain=thisMonthInc-thisMonthNet;
-  const budgetRemain=budgetTotal-thisMonthNet;
-  // 잔여
-  document.getElementById('acRemain').textContent=fmt(remain);
-  document.getElementById('acRemain').className='ac-val '+(remain>=0?'cg':'cr');
-  document.getElementById('acRemainSub').textContent=`수입 ${fmt(thisMonthInc)} 기준`;
-  document.getElementById('acRemainBudget').textContent=`예산 기준 잔여: ${fmt(budgetRemain)}`;
-  document.getElementById('acRemainBudget').style.color=budgetRemain>=0?'var(--green)':'var(--red)';
-  const rt=document.getElementById('acRemainTag');
-  if(remain<0){rt.textContent='초과';rt.className='ac-tag tag-r';}
-  else if(remain<thisMonthInc*0.1){rt.textContent='여유 부족';rt.className='ac-tag tag-a';}
-  else{rt.textContent='여유 있음';rt.className='ac-tag tag-g';}
-  // 월말 예상
-  document.getElementById('acForecast').textContent=fmt(forecast);
-  document.getElementById('acForecast').className='ac-val '+(forecast>thisMonthInc?'cr':'ca');
-  document.getElementById('acForecastSub').textContent=`일평균 ${fmt(dailyAvg)} × ${daysInMonth}일`;
-  const ft=document.getElementById('acForecastTag');
-  if(forecast>thisMonthInc){ft.textContent='수입 초과 예상';ft.className='ac-tag tag-r';}
-  else if(forecast>thisMonthInc*0.85){ft.textContent='주의 수준';ft.className='ac-tag tag-a';}
+  const budgetTotal = bCats.reduce((s,{k})=>s+getBA(k,ms), 0);
+
+  // 💰 잔여 사용 가능 (수입 - 순소비)
+  const remain = totalInc - totalNet;
+  const budgetRemain = budgetTotal - totalNet;
+  document.getElementById('acRemain').textContent = fmt(remain);
+  document.getElementById('acRemain').className = 'ac-val '+(remain>=0?'cg':'cr');
+  document.getElementById('acRemainSub').textContent = `수입 ${fmt(totalInc)} · ${rangeStr} 누계`;
+  document.getElementById('acRemainBudget').textContent = `예산 기준 잔여: ${fmt(budgetRemain)}`;
+  document.getElementById('acRemainBudget').style.color = budgetRemain>=0?'var(--green)':'var(--red)';
+  const rt = document.getElementById('acRemainTag');
+  const savRate = totalInc>0?totalSav/totalInc*100:0;
+  if(remain<0){rt.textContent='수입 초과';rt.className='ac-tag tag-r';}
+  else if(savRate<10){rt.textContent='저축률 부족';rt.className='ac-tag tag-a';}
+  else{rt.textContent=`저축률 ${savRate.toFixed(1)}%`;rt.className='ac-tag tag-g';}
+
+  // 📈 월평균 지출
+  const monthlyAvg = cnt>0 ? totalNet/cnt : 0;
+  const monthlyAvgInc = cnt>0 ? totalInc/cnt : 0;
+  document.getElementById('acForecast').textContent = fmt(monthlyAvg);
+  document.getElementById('acForecast').className = 'ac-val '+(monthlyAvg>monthlyAvgInc?'cr':'ca');
+  document.getElementById('acForecastSub').textContent = `월평균 수입 ${fmt(monthlyAvgInc)} 기준`;
+  const ft = document.getElementById('acForecastTag');
+  const ratio = monthlyAvgInc>0?monthlyAvg/monthlyAvgInc:0;
+  if(ratio>1){ft.textContent='수입 초과';ft.className='ac-tag tag-r';}
+  else if(ratio>0.85){ft.textContent='주의 수준';ft.className='ac-tag tag-a';}
   else{ft.textContent='안정적';ft.className='ac-tag tag-g';}
-  // TOP1
-  const items=bCats.map(({k,r})=>{const actual=sumM(getRow(r),[lastM]);const budget=getBM(k,lastM);return{k,actual,budget,pct:budget>0?actual/budget*100:0};}).filter(x=>x.pct>0).sort((a,b)=>b.pct-a.pct);
-  const top1=items[0];
+
+  // ⚠️ 과소비 TOP1 (예산 대비 초과율 높은 항목)
+  const items = bCats.map(({k,r})=>{
+    const actual=sumM(getRow(r),ms);
+    const budget=getBA(k,ms);
+    return{k,actual,budget,pct:budget>0?actual/budget*100:0};
+  }).filter(x=>x.pct>0).sort((a,b)=>b.pct-a.pct);
+  const top1 = items[0];
   const t1=document.getElementById('acTop1'),t1s=document.getElementById('acTop1Sub'),t1t=document.getElementById('acTop1Tag');
-  if(top1){t1.textContent=top1.k;t1.className='ac-val '+(top1.pct>=100?'cr':'ca');t1s.textContent=`${fmtR(top1.actual)}원 / 예산 ${fmtR(top1.budget)}원`;t1t.textContent=`예산 ${Math.round(top1.pct)}%`;t1t.className='ac-tag '+(top1.pct>=100?'tag-r':'tag-a');}
-  else{t1.textContent='없음';t1.className='ac-val cg';t1s.textContent='모든 항목 예산 이내';t1t.textContent='정상';t1t.className='ac-tag tag-g';}
+  if(top1){
+    t1.textContent=top1.k;
+    t1.className='ac-val '+(top1.pct>=100?'cr':'ca');
+    t1s.textContent=`${fmt(top1.actual)} / 예산 ${fmt(top1.budget)}`;
+    t1t.textContent=`예산 ${Math.round(top1.pct)}%`;
+    t1t.className='ac-tag '+(top1.pct>=100?'tag-r':'tag-a');
+  } else {
+    t1.textContent='없음';t1.className='ac-val cg';
+    t1s.textContent='모든 항목 예산 이내';
+    t1t.textContent='정상';t1t.className='ac-tag tag-g';
+  }
 }
 
 function render(){
@@ -652,7 +668,7 @@ function render(){
   const curA=aArr[lastM-1]||0,prevA=lastM>1?(aArr[lastM-2]||0):0;
 
   buildSummary(ms,lastM,totalInc,totalNet,totalSav);
-  buildActionBar(lastM);
+  buildActionBar(ms, rangeStr);
 
   // 요약카드
   document.getElementById('lblInc').textContent=`총 수입 (${rangeStr})`;
